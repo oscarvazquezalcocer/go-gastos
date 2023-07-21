@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -13,22 +12,58 @@ import (
 )
 
 type Bill struct {
-	Id      int       `json:"id"`
-	Date    time.Time `json:"date"`
-	Concept string    `json:"concept"`
-	Price   float32   `json:"price"`
+	gorm.Model
+	//Id      int       `json:"id"`
+	//Date    time.Time `json:"date"`
+	Concept string  `json:"concept"`
+	Price   float32 `json:"price"`
+}
+
+var db *gorm.DB
+
+func main() {
+	r := gin.Default()
+
+	// Conexion ala base de datos
+	connectDB()
+	// Enable CORS middleware with permissive configuration
+	config := cors.DefaultConfig()
+	config.AllowAllOrigins = true
+	r.Use(cors.New(config))
+
+	// routes
+	r.GET("/bills", billsHandler)
+	r.POST("/bills", newBillHandler)
+	r.GET("/bills/:id", getBillHandler)
+	r.DELETE("/bills/:id", deleteBillHandler)
+
+	r.Run(":8502")
+}
+
+func getBillHandler(c *gin.Context) {
+	var bill Bill
+
+	billID := c.Param("id")
+
+	// Check if the "id" parameter is empty
+	if billID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid bill ID"})
+		return
+	}
+
+	// find the first value in the data base with billID
+	if err := db.First(&bill, billID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Bill not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, bill)
 }
 
 func billsHandler(c *gin.Context) {
-	// Dummy los datos de una lista
-	// TODO fecthar los datos de la base de datos
+	// fecthar los datos de la base de datos
 	var bills []Bill
 	db.Find(&bills)
-	// bills := []Bill{
-	// 	Bill{1, time.Now(), "Tacos", 200},
-	// 	Bill{2, time.Now(), "Oxxo", 300},
-	// 	Bill{3, time.Now(), "Pan", 50},
-	// }
 
 	// Set the "Access-Control-Allow-Origin" header to allow all origins (*)
 	c.Header("Access-Control-Allow-Origin", "*")
@@ -54,7 +89,31 @@ func newBillHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Received JSON", "data": newBill.Concept})
 }
 
-var db *gorm.DB
+func deleteBillHandler(c *gin.Context) {
+	var bill Bill
+
+	billID := c.Param("id")
+
+	// Check if the "id" parameter is empty
+	if billID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid bill ID"})
+		return
+	}
+
+	// find the first value in the data base with billID
+	if err := db.First(&bill, billID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Bill not found"})
+		return
+	}
+
+	// delete the bill is found
+	if err := db.Delete(&bill).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete Bill"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Bill delete successfully"})
+}
 
 func connectDB() {
 
@@ -66,19 +125,4 @@ func connectDB() {
 
 	// AutoMigrate intenta crear la tabala si no existe
 	db.AutoMigrate(&Bill{})
-}
-
-func main() {
-	r := gin.Default()
-
-	// Conexion ala base de datos
-	connectDB()
-	// Enable CORS middleware with permissive configuration
-	config := cors.DefaultConfig()
-	config.AllowAllOrigins = true
-	r.Use(cors.New(config))
-
-	r.GET("/bills", billsHandler)
-	r.POST("/bills", newBillHandler)
-	r.Run(":8502")
 }
